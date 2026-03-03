@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Link Shortener Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { 
+            font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif; 
+            margin: 20px; 
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        canvas {
+            max-height: 400px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dashboard</h1>
+    
+    <div>
+        <h2>All Links</h2>
+        <table id="links-table">
+            <thead>
+                <tr>
+                    <th>Short Code</th>
+                    <th>Original URL</th>
+                    <th>Created At</th>
+                    <th>Clicks</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div>
+        <h2>Link Statistics</h2>
+        <canvas id="clicks-chart"></canvas>
+    </div>
+
+    <script>
+    async function loadDashboard() {
+        try {
+            const linksRes = await fetch('/api/links');
+            const links = await linksRes.json();
+            console.log('Loaded links:', links); // Debug log
+
+            const tbody = document.querySelector('#links-table tbody');
+            tbody.innerHTML = ''; // Clear existing rows
+            
+            links.forEach(link => {
+                const row = tbody.insertRow();
+                row.insertCell().innerHTML = `<a href="/${link.short_code}" target="_blank">${link.short_code}</a>`;
+                row.insertCell().innerHTML = `<a href="${link.original_url}" target="_blank">${truncate(link.original_url, 50)}</a>`;
+                row.insertCell().textContent = new Date(link.created_at).toLocaleString();
+                row.insertCell().textContent = link.clicks_count;
+                row.insertCell().innerHTML = `<button onclick="showDetails('${link.short_code}')">Details</button>`;
+            });
+
+            if(links.length > 0) {
+                showDetails(links[0].short_code);
+            }
+        } catch (error) {
+            console.error('Error loading dashboard:', error);
+        }
+    }
+
+    function truncate(str, n) {
+        return (str.length > n) ? str.substr(0, n-1) + '...' : str;
+    }
+
+    async function showDetails(shortCode) {
+        try {
+            console.log('Fetching stats for:', shortCode); // Debug log
+            const res = await fetch(`/stats/${shortCode}`);
+            
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            
+            const data = await res.json();
+            console.log('Stats data:', data); // Debug log
+
+            // Process clicks to get daily counts
+            const clicksByDate = {};
+            if (data.clicks && data.clicks.length > 0) {
+                data.clicks.forEach(click => {
+                    const date = new Date(click.timestamp).toLocaleDateString();
+                    clicksByDate[date] = (clicksByDate[date] || 0) + 1;
+                });
+            }
+
+            const labels = Object.keys(clicksByDate).sort();
+            const values = labels.map(d => clicksByDate[d]);
+
+            // Update chart
+            const ctx = document.getElementById('clicks-chart').getContext('2d');
+            if (window.myChart) {
+                window.myChart.destroy();
+            }
+            
+            window.myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels.length ? labels : ['No data'],
+                    datasets: [{
+                        label: `Clicks for ${shortCode}`,
+                        data: labels.length ? values : [0],
+                        borderColor: 'blue',
+                        backgroundColor: 'rgba(0, 0, 255, 0.1)',
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1,
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Error showing details:', error);
+        }
+    }
+
+    // Load dashboard when page loads
+    document.addEventListener('DOMContentLoaded', loadDashboard);
+</script>
+</body>
+</html>
