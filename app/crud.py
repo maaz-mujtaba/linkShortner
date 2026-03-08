@@ -40,3 +40,16 @@ def create_click(db: Session, link_id: int, click_data: schemas.ClickBase):
 def get_link_stats(db: Session, short_code: str):  # CORRECT - using short_code
     return db.query(Link).filter(Link.short_code == short_code).first()
 
+from cache_utils import invalidate_link_cache
+
+def update_link(db: Session, short_code: str, new_url: str):
+    """Example of updating a link (if you add this feature)"""
+    link = get_link_by_code(db, short_code)
+    if link:
+        link.original_url = new_url
+        db.commit()
+        db.refresh(link)
+        # Invalidate cache
+        invalidate_link_cache(short_code)
+        return link
+    return None
